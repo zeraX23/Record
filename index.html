@@ -1,30 +1,193 @@
-function doPost(e) {
-  try {
-    // ID Folder Google Drive Anda (Sudah otomatis terpasang)
-    var folderId = "1dIBOAk_n2hUDlncTpUCVty7BtSrKy7yf"; 
-    var folder = DriveApp.getFolderById(folderId);
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Perekam Video Terintegrasi Google Drive</title>
+    <style>
+        body { 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
+            text-align: center; 
+            padding: 20px; 
+            background-color: #f8f9fa; 
+            color: #333;
+        }
+        h2 { margin-bottom: 20px; color: #2c3e50; }
+        video { 
+            width: 100%; 
+            max-width: 640px; 
+            background: #000; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            margin-bottom: 20px; 
+        }
+        .controls { margin-bottom: 25px; }
+        button { 
+            padding: 12px 24px; 
+            margin: 5px; 
+            font-size: 16px; 
+            font-weight: bold;
+            cursor: pointer; 
+            border: none; 
+            border-radius: 8px; 
+            color: white; 
+            transition: 0.3s;
+        }
+        #startBtn { background-color: #28a745; }
+        #startBtn:hover:not(:disabled) { background-color: #218838; }
+        #stopBtn { background-color: #dc3545; }
+        #stopBtn:hover:not(:disabled) { background-color: #c82333; }
+        #uploadBtn { background-color: #007bff; }
+        #uploadBtn:hover:not(:disabled) { background-color: #0069d9; }
+        button:disabled { background-color: #6c757d; cursor: not-allowed; opacity: 0.7; }
+        #status { 
+            font-weight: bold; 
+            margin-top: 15px; 
+            padding: 10px;
+            border-radius: 5px;
+            background-color: #e9ecef;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Aplikasi Perekam Video</h2>
     
-    // Mendapatkan data file dari request (format base64)
-    var data = e.parameter.fileData;
-    var filename = e.parameter.filename;
+    <video id="preview" autoplay muted playsinline></video>
     
-    // Decode base64 menjadi file binary
-    var contentType = data.substring(5,data.indexOf(';')),
-        bytes = Utilities.base64Decode(data.substr(data.indexOf('base64,')+7)),
-        blob = Utilities.newBlob(bytes, contentType, filename);
+    <div class="controls">
+        <button id="startBtn">Mulai Rekaman</button>
+        <button id="stopBtn" disabled>Berhenti & Simpan</button>
+        <button id="uploadBtn" disabled>Unggah ke Google Drive</button>
+    </div>
     
-    // Simpan ke Drive
-    var file = folder.createFile(blob);
-    
-    return ContentService.createTextOutput(JSON.stringify({
-      status: "success", 
-      url: file.getUrl()
-    })).setMimeType(ContentService.MimeType.JSON);
-    
-  } catch (error) {
-    return ContentService.createTextOutput(JSON.stringify({
-      status: "error", 
-      message: error.toString()
-    })).setMimeType(ContentService.MimeType.JSON);
-  }
-}
+    <p id="status">Status: Menunggu izin kamera...</p>
+
+    <script>
+        // PENTING: GANTI URL DI BAWAH INI DENGAN URL WEB APP GOOGLE APPS SCRIPT ANDA
+        const GAS_URL = "MASUKKAN_URL_WEB_APP_DARI_APPS_SCRIPT_DI_SINI";
+
+        let mediaRecorder;
+        let recordedChunks = [];
+        let videoBlob;
+
+        const preview = document.getElementById('preview');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const uploadBtn = document.getElementById('uploadBtn');
+        const statusText = document.getElementById('status');
+
+        // Meminta akses kamera dan mikrofon
+        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+            .then(stream => {
+                preview.srcObject = stream;
+                statusText.innerText = "Status: Kamera siap digunakan.";
+                
+                // Menggunakan format webm karena didukung baik oleh browser
+                mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+                mediaRecorder.ondataavailable = event => {
+                    if (event.data.size > 0) {
+                        recordedChunks.push(event.data);
+                    }
+                };
+
+                mediaRecorder.onstop = () => {
+                    videoBlob = new Blob(recordedChunks, { type: 'video/webm' });
+                    recordedChunks = []; // Reset chunks untuk rekaman berikutnya
+                    uploadBtn.disabled = false;
+                    statusText.innerText = "Status: Rekaman selesai. Siap diunggah.";
+                    
+                    // Memutar ulang hasil rekaman di elemen video
+                    preview.srcObject = null;
+                    preview.src = URL.createObjectURL(videoBlob);
+                    preview.controls = true;
+                    preview.muted = false;
+                };
+            })
+            .catch(err => {
+                statusText.innerText = "Error: Kamera atau mikrofon tidak dapat diakses.";
+                console.error("Gagal mengakses media perangkat.", err);
+            });
+
+        // Event Listener untuk Tombol Mulai Rekam
+        startBtn.addEventListener('click', () => {
+            // Jika memutar ulang video sebelumnya, kembalikan ke live stream kamera
+            if (!preview.srcObject) {
+                navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                    .then(stream => {
+                        preview.src = "";
+                        preview.srcObject = stream;
+                        preview.controls = false;
+                        preview.muted = true;
+                        preview.play();
+                    });
+            }
+
+            recordedChunks = [];
+            mediaRecorder.start();
+            startBtn.disabled = true;
+            stopBtn.disabled = false;
+            uploadBtn.disabled = true;
+            statusText.innerText = "Status: Sedang merekam (Tombol Berhenti akan mengakhiri)...";
+        });
+
+        // Event Listener untuk Tombol Berhenti Rekam
+        stopBtn.addEventListener('click', () => {
+            mediaRecorder.stop();
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        });
+
+        // Event Listener untuk Tombol Unggah
+        uploadBtn.addEventListener('click', () => {
+            if (!videoBlob) return;
+
+            // Validasi jika URL Apps Script belum diganti
+            if (GAS_URL === "MASUKKAN_URL_WEB_APP_DARI_APPS_SCRIPT_DI_SINI") {
+                alert("Harap masukkan URL Web App Google Apps Script ke dalam variabel GAS_URL di kode HTML terlebih dahulu.");
+                return;
+            }
+
+            statusText.innerText = "Status: Memproses ukuran file...";
+            uploadBtn.disabled = true;
+            startBtn.disabled = true;
+
+            const reader = new FileReader();
+            reader.readAsDataURL(videoBlob);
+            reader.onloadend = function() {
+                const base64data = reader.result;
+                const fileName = "Rekaman_" + new Date().getTime() + ".webm";
+
+                statusText.innerText = "Status: Sedang mengunggah ke Google Drive (Mohon tunggu, jangan tutup halaman)...";
+
+                fetch(GAS_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body: new URLSearchParams({
+                        'filename': fileName,
+                        'fileData': base64data
+                    })
+                })
+                .then(response => response.json())
+                .then(result => {
+                    if (result.status === 'success') {
+                        statusText.innerHTML = `Status: Berhasil! <a href="${result.url}" target="_blank" style="color: #007bff;">Lihat Video di Google Drive</a>`;
+                    } else {
+                        statusText.innerText = "Status: Gagal mengunggah - " + result.message;
+                    }
+                    uploadBtn.disabled = false;
+                    startBtn.disabled = false;
+                })
+                .catch(error => {
+                    statusText.innerText = "Status: Terjadi kesalahan jaringan. Pastikan URL Web App benar dan internet stabil.";
+                    console.error("Error:", error);
+                    uploadBtn.disabled = false;
+                    startBtn.disabled = false;
+                });
+            };
+        });
+    </script>
+</body>
+</html>
