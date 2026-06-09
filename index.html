@@ -3,301 +3,127 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Perekam Video Kustom Terintegrasi Google Drive</title>
+    <title>Meeting Online - Video Conference</title>
+    <script src="https://meet.jit.si/external_api.js"></script>
     <style>
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
-            text-align: center; 
-            padding: 20px; 
-            background-color: #f8f9fa; 
-            color: #333;
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { margin: 0; padding: 0; background-color: #f0f2f5; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; }
+        
+        #setup-container {
+            background: white; padding: 40px; border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); text-align: center; max-width: 400px; width: 90%;
         }
-        h2 { margin-bottom: 20px; color: #2c3e50; }
-        .container {
-            max-width: 640px;
-            margin: 0 auto;
+        h2 { color: #1a73e8; margin-top: 0; }
+        p { color: #555; margin-bottom: 20px; font-size: 14px; }
+        
+        .input-group { margin-bottom: 15px; text-align: left; }
+        .input-group label { display: block; font-weight: bold; margin-bottom: 5px; color: #333; font-size: 14px; }
+        .input-group input { 
+            width: 100%; padding: 12px; border: 1px solid #ccc; 
+            border-radius: 8px; font-size: 14px; transition: border 0.3s;
         }
-        video { 
-            width: 100%; 
-            background: #000; 
-            border-radius: 12px; 
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-            margin-bottom: 20px; 
-            transition: aspect-ratio 0.3s ease;
+        .input-group input:focus { border-color: #1a73e8; outline: none; }
+        
+        button {
+            width: 100%; padding: 12px; background-color: #1a73e8; color: white;
+            border: none; border-radius: 8px; font-size: 16px; font-weight: bold;
+            cursor: pointer; transition: 0.3s; margin-top: 10px;
         }
-        .settings-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 10px;
-            margin-bottom: 20px;
-            background: #fff;
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        button:hover { background-color: #1557b0; }
+        
+        /* Container untuk video conference (awalnya disembunyikan) */
+        #meeting-container { display: none; width: 100%; height: 100vh; background: #000; }
+        
+        /* Tombol keluar (muncul saat meeting berlangsung) */
+        #leaveBtn {
+            position: fixed; top: 15px; right: 15px; width: auto; 
+            background-color: #dc3545; padding: 8px 16px; z-index: 100; display: none;
         }
-        .setting-item {
-            display: flex;
-            flex-direction: column;
-            text-align: left;
-        }
-        .setting-item label {
-            font-size: 12px;
-            font-weight: bold;
-            margin-bottom: 5px;
-            color: #666;
-        }
-        select {
-            padding: 8px;
-            border-radius: 5px;
-            border: 1px solid #ccc;
-            font-size: 14px;
-            background-color: #fff;
-        }
-        .controls { margin-bottom: 25px; }
-        button { 
-            padding: 12px 24px; 
-            margin: 5px; 
-            font-size: 16px; 
-            font-weight: bold;
-            cursor: pointer; 
-            border: none; 
-            border-radius: 8px; 
-            color: white; 
-            transition: 0.3s;
-        }
-        #startBtn { background-color: #28a745; }
-        #startBtn:hover:not(:disabled) { background-color: #218838; }
-        #stopBtn { background-color: #dc3545; }
-        #stopBtn:hover:not(:disabled) { background-color: #c82333; }
-        #uploadBtn { background-color: #007bff; }
-        #uploadBtn:hover:not(:disabled) { background-color: #0069d9; }
-        button:disabled { background-color: #6c757d; cursor: not-allowed; opacity: 0.7; }
-        #status { 
-            font-weight: bold; 
-            margin-top: 15px; 
-            padding: 10px;
-            border-radius: 5px;
-            background-color: #e9ecef;
-            display: inline-block;
-        }
+        #leaveBtn:hover { background-color: #c82333; }
     </style>
 </head>
 <body>
 
-    <div class="container">
-        <h2>Aplikasi Perekam Video Advanced</h2>
+    <div id="setup-container">
+        <h2>🌐 Meeting Online</h2>
+        <p>Buat atau gabung ke ruangan meeting tanpa batas waktu.</p>
         
-        <div class="settings-grid">
-            <div class="setting-item">
-                <label for="cameraSelect">Pilih Kamera</label>
-                <select id="cameraSelect">
-                    <option value="user">Kamera Depan (Selfie)</option>
-                    <option value="environment" selected>Kamera Belakang (Utama)</option>
-                </select>
-            </div>
-            <div class="setting-item">
-                <label for="resolutionSelect">Resolusi (Kualitas)</label>
-                <select id="resolutionSelect">
-                    <option value="max">Maksimal (Sesuai Spek HP)</option>
-                    <option value="1080p">Full HD (1080p)</option>
-                    <option value="720p" selected>HD (720p) - Disarankan</option>
-                    <option value="480p">Standar (480p)</option>
-                </select>
-            </div>
-            <div class="setting-item">
-                <label for="aspectSelect">Ukuran / Rasio Tampilan</label>
-                <select id="aspectSelect">
-                    <option value="16/9">Lanskap / Wide (16:9)</option>
-                    <option value="9/16">Potret / Story (9:16)</option>
-                    <option value="1/1">Kotak / Feed (1:1)</option>
-                </select>
-            </div>
+        <div class="input-group">
+            <label for="roomName">Nama Ruangan</label>
+            <input type="text" id="roomName" placeholder="Misal: RapatProyek123" required>
         </div>
         
-        <video id="preview" autoplay muted playsinline></video>
-        
-        <div class="controls">
-            <button id="startBtn">Mulai Rekaman</button>
-            <button id="stopBtn" disabled>Berhenti & Simpan</button>
-            <button id="uploadBtn" disabled>Unggah ke Google Drive</button>
+        <div class="input-group">
+            <label for="userName">Nama Anda</label>
+            <input type="text" id="userName" placeholder="Misal: Hufron" required>
         </div>
         
-        <p id="status">Status: Mempersiapkan kamera...</p>
+        <button onclick="startMeeting()">Masuk ke Ruangan</button>
     </div>
 
+    <div id="meeting-container"></div>
+    <button id="leaveBtn" onclick="leaveMeeting()">Keluar Meeting</button>
+
     <script>
-        // PENTING: JANGAN LUPA GANTI DENGAN URL WEB APP GOOGLE APPS SCRIPT ANDA
-        const GAS_URL = "MASUKKAN_URL_WEB_APP_DARI_APPS_SCRIPT_DI_SINI";
+        let api = null; // Menyimpan objek API Jitsi
 
-        let mediaRecorder;
-        let recordedChunks = [];
-        let videoBlob;
-        let currentStream = null;
+        function startMeeting() {
+            const roomNameInput = document.getElementById('roomName').value.trim();
+            const userNameInput = document.getElementById('userName').value.trim();
 
-        const preview = document.getElementById('preview');
-        const startBtn = document.getElementById('startBtn');
-        const stopBtn = document.getElementById('stopBtn');
-        const uploadBtn = document.getElementById('uploadBtn');
-        const statusText = document.getElementById('status');
-
-        // Elemen Input Pengaturan
-        const cameraSelect = document.getElementById('cameraSelect');
-        const resolutionSelect = document.getElementById('resolutionSelect');
-        const aspectSelect = document.getElementById('aspectSelect');
-
-        // Fungsi konfigurasi resolusi berdasarkan pilihan user
-        function getResolutionConstraints(selection) {
-            switch(selection) {
-                case '1080p': return { width: { ideal: 1920 }, height: { ideal: 1080 } };
-                case '720p':  return { width: { ideal: 1280 }, height: { ideal: 720 } };
-                case '480p':  return { width: { ideal: 854 }, height: { ideal: 480 } };
-                case 'max':   default: return { width: { ideal: 4096 }, height: { ideal: 2160 } }; // Memaksa HP memberikan resolusi tertingginya
-            }
-        }
-
-        // Fungsi utama untuk memulai/mengubah aliran kamera (Stream)
-        function initCamera() {
-            if (currentStream) {
-                currentStream.getTracks().forEach(track => track.stop());
-            }
-
-            statusText.innerText = "Status: Membuka kamera...";
-            
-            const resConstraints = getResolutionConstraints(resolutionSelect.value);
-            const facingMode = cameraSelect.value;
-            
-            // Mengatur aspek rasio pada video box (CSS)
-            const [wRatio, hRatio] = aspectSelect.value.split('/');
-            preview.style.aspectRatio = `${wRatio} / ${hRatio}`;
-
-            // Menyusun semua perintah konfigurasi ke browser
-            const constraints = {
-                video: {
-                    facingMode: facingMode,
-                    width: resConstraints.width,
-                    height: resConstraints.height,
-                    aspectRatio: parseFloat(wRatio) / parseFloat(hRatio)
-                },
-                audio: true
-            };
-
-            navigator.mediaDevices.getUserMedia(constraints)
-                .then(stream => {
-                    currentStream = stream;
-                    preview.srcObject = stream;
-                    
-                    // Deteksi resolusi aktual yang berhasil didapatkan dari hardware HP
-                    const videoTrack = stream.getVideoTracks()[0];
-                    const settings = videoTrack.getSettings();
-                    statusText.innerText = `Status: Kamera aktif (${settings.width}x${settings.height} px)`;
-
-                    // Inisialisasi MediaRecorder
-                    mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-
-                    mediaRecorder.ondataavailable = event => {
-                        if (event.data.size > 0) recordedChunks.push(event.data);
-                    };
-
-                    mediaRecorder.onstop = () => {
-                        videoBlob = new Blob(recordedChunks, { type: 'video/webm' });
-                        recordedChunks = [];
-                        uploadBtn.disabled = false;
-                        statusText.innerText = "Status: Rekaman selesai. Siap diunggah.";
-                        
-                        // Tampilkan hasil rekaman untuk review
-                        preview.srcObject = null;
-                        preview.src = URL.createObjectURL(videoBlob);
-                        preview.controls = true;
-                        preview.muted = false;
-                    };
-                })
-                .catch(err => {
-                    statusText.innerText = "Error: Konfigurasi kamera tidak didukung atau izin ditolak.";
-                    console.error(err);
-                });
-        }
-
-        // Jalankan kamera otomatis saat pertama kali halaman dibuka
-        initCamera();
-
-        // Event listener saat user mengubah pengaturan di tengah jalan
-        cameraSelect.addEventListener('change', initCamera);
-        resolutionSelect.addEventListener('change', initCamera);
-        aspectSelect.addEventListener('change', initCamera);
-
-        // Aksi Tombol Mulai Rekam
-        startBtn.addEventListener('click', () => {
-            if (!preview.srcObject) {
-                initCamera();
-                setTimeout(() => mediaRecorder.start(), 1000); // Beri jeda 1 detik agar kamera siap
-            } else {
-                mediaRecorder.start();
-            }
-            startBtn.disabled = true;
-            stopBtn.disabled = false;
-            uploadBtn.disabled = true;
-            cameraSelect.disabled = true;
-            resolutionSelect.disabled = true;
-            aspectSelect.disabled = true;
-            statusText.innerText = "Status: Sedang merekam...";
-        });
-
-        // Aksi Tombol Berhenti Rekam
-        stopBtn.addEventListener('click', () => {
-            mediaRecorder.stop();
-            startBtn.disabled = false;
-            stopBtn.disabled = true;
-            cameraSelect.disabled = false;
-            resolutionSelect.disabled = false;
-            aspectSelect.disabled = false;
-        });
-
-        // Aksi Tombol Unggah ke Google Drive
-        uploadBtn.addEventListener('click', () => {
-            if (!videoBlob) return;
-            if (GAS_URL === "MASUKKAN_URL_WEB_APP_DARI_APPS_SCRIPT_DI_SINI") {
-                alert("Harap masukkan URL Web App Google Apps Script Anda ke variabel GAS_URL!");
+            if (!roomNameInput || !userNameInput) {
+                alert("Harap isi Nama Ruangan dan Nama Anda!");
                 return;
             }
 
-            statusText.innerText = "Status: Memproses video...";
-            uploadBtn.disabled = true;
-            startBtn.disabled = true;
+            // Menyembunyikan tampilan lobi, memunculkan layar meeting
+            document.getElementById('setup-container').style.display = 'none';
+            document.getElementById('meeting-container').style.display = 'block';
+            document.getElementById('leaveBtn').style.display = 'block';
 
-            const reader = new FileReader();
-            reader.readAsDataURL(videoBlob);
-            reader.onloadend = function() {
-                const base64data = reader.result;
-                const fileName = "Rekaman_" + new Date().getTime() + ".webm";
-
-                statusText.innerText = "Status: Mengunggah ke Google Drive (Mohon tunggu)...";
-
-                fetch(GAS_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                    body: new URLSearchParams({
-                        'filename': fileName,
-                        'fileData': base64data
-                    })
-                })
-                .then(response => response.json())
-                .then(result => {
-                    if (result.status === 'success') {
-                        statusText.innerHTML = `Status: Sukses! <a href="${result.url}" target="_blank" style="color: #007bff; text-decoration: underline;">Lihat File di Drive</a>`;
-                    } else {
-                        statusText.innerText = "Status: Gagal - " + result.message;
-                    }
-                    uploadBtn.disabled = false;
-                    startBtn.disabled = false;
-                })
-                .catch(error => {
-                    statusText.innerText = "Status: Terjadi kesalahan jaringan.";
-                    console.error("Error:", error);
-                    uploadBtn.disabled = false;
-                    startBtn.disabled = false;
-                });
+            // Konfigurasi Jitsi Meet
+            const domain = 'meet.jit.si';
+            const options = {
+                roomName: roomNameInput.replace(/\s+/g, '-'), // Mengganti spasi dengan strip
+                width: '100%',
+                height: '100%',
+                parentNode: document.querySelector('#meeting-container'),
+                userInfo: {
+                    displayName: userNameInput
+                },
+                configOverwrite: {
+                    startWithAudioMuted: true, // Masuk dalam keadaan mic mati
+                    startWithVideoMuted: false, // Masuk dalam keadaan kamera hidup
+                    prejoinPageEnabled: false // Langsung masuk tanpa halaman pre-join jitsi
+                },
+                interfaceConfigOverwrite: {
+                    SHOW_JITSI_WATERMARK: false // Menyembunyikan logo jitsi
+                }
             };
-        });
+
+            // Memulai Meeting
+            api = new JitsiMeetExternalAPI(domain, options);
+            
+            // Event listener saat user secara internal menekan tombol hangup di Jitsi
+            api.addListener('videoConferenceLeft', () => {
+                leaveMeeting();
+            });
+        }
+
+        function leaveMeeting() {
+            if (api) {
+                api.dispose(); // Mematikan iframe video
+                api = null;
+            }
+            
+            // Mengembalikan tampilan ke lobi awal
+            document.getElementById('setup-container').style.display = 'block';
+            document.getElementById('meeting-container').style.display = 'none';
+            document.getElementById('leaveBtn').style.display = 'none';
+            
+            // Kosongkan nama ruangan untuk meeting selanjutnya
+            document.getElementById('roomName').value = '';
+        }
     </script>
 </body>
 </html>
