@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Perekam Video Terintegrasi Google Drive</title>
+    <title>Perekam Video Kustom Terintegrasi Google Drive</title>
     <style>
         body { 
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; 
@@ -13,13 +13,45 @@
             color: #333;
         }
         h2 { margin-bottom: 20px; color: #2c3e50; }
+        .container {
+            max-width: 640px;
+            margin: 0 auto;
+        }
         video { 
             width: 100%; 
-            max-width: 640px; 
             background: #000; 
             border-radius: 12px; 
             box-shadow: 0 4px 8px rgba(0,0,0,0.2);
             margin-bottom: 20px; 
+            transition: aspect-ratio 0.3s ease;
+        }
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 20px;
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .setting-item {
+            display: flex;
+            flex-direction: column;
+            text-align: left;
+        }
+        .setting-item label {
+            font-size: 12px;
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #666;
+        }
+        select {
+            padding: 8px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 14px;
+            background-color: #fff;
         }
         .controls { margin-bottom: 25px; }
         button { 
@@ -52,25 +84,55 @@
 </head>
 <body>
 
-    <h2>Aplikasi Perekam Video</h2>
-    
-    <video id="preview" autoplay muted playsinline></video>
-    
-    <div class="controls">
-        <button id="startBtn">Mulai Rekaman</button>
-        <button id="stopBtn" disabled>Berhenti & Simpan</button>
-        <button id="uploadBtn" disabled>Unggah ke Google Drive</button>
+    <div class="container">
+        <h2>Aplikasi Perekam Video Advanced</h2>
+        
+        <div class="settings-grid">
+            <div class="setting-item">
+                <label for="cameraSelect">Pilih Kamera</label>
+                <select id="cameraSelect">
+                    <option value="user">Kamera Depan (Selfie)</option>
+                    <option value="environment" selected>Kamera Belakang (Utama)</option>
+                </select>
+            </div>
+            <div class="setting-item">
+                <label for="resolutionSelect">Resolusi (Kualitas)</label>
+                <select id="resolutionSelect">
+                    <option value="max">Maksimal (Sesuai Spek HP)</option>
+                    <option value="1080p">Full HD (1080p)</option>
+                    <option value="720p" selected>HD (720p) - Disarankan</option>
+                    <option value="480p">Standar (480p)</option>
+                </select>
+            </div>
+            <div class="setting-item">
+                <label for="aspectSelect">Ukuran / Rasio Tampilan</label>
+                <select id="aspectSelect">
+                    <option value="16/9">Lanskap / Wide (16:9)</option>
+                    <option value="9/16">Potret / Story (9:16)</option>
+                    <option value="1/1">Kotak / Feed (1:1)</option>
+                </select>
+            </div>
+        </div>
+        
+        <video id="preview" autoplay muted playsinline></video>
+        
+        <div class="controls">
+            <button id="startBtn">Mulai Rekaman</button>
+            <button id="stopBtn" disabled>Berhenti & Simpan</button>
+            <button id="uploadBtn" disabled>Unggah ke Google Drive</button>
+        </div>
+        
+        <p id="status">Status: Mempersiapkan kamera...</p>
     </div>
-    
-    <p id="status">Status: Menunggu izin kamera...</p>
 
     <script>
-        // PENTING: GANTI URL DI BAWAH INI DENGAN URL WEB APP GOOGLE APPS SCRIPT ANDA
+        // PENTING: JANGAN LUPA GANTI DENGAN URL WEB APP GOOGLE APPS SCRIPT ANDA
         const GAS_URL = "MASUKKAN_URL_WEB_APP_DARI_APPS_SCRIPT_DI_SINI";
 
         let mediaRecorder;
         let recordedChunks = [];
         let videoBlob;
+        let currentStream = null;
 
         const preview = document.getElementById('preview');
         const startBtn = document.getElementById('startBtn');
@@ -78,79 +140,127 @@
         const uploadBtn = document.getElementById('uploadBtn');
         const statusText = document.getElementById('status');
 
-        // Meminta akses kamera dan mikrofon
-        navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-            .then(stream => {
-                preview.srcObject = stream;
-                statusText.innerText = "Status: Kamera siap digunakan.";
-                
-                // Menggunakan format webm karena didukung baik oleh browser
-                mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+        // Elemen Input Pengaturan
+        const cameraSelect = document.getElementById('cameraSelect');
+        const resolutionSelect = document.getElementById('resolutionSelect');
+        const aspectSelect = document.getElementById('aspectSelect');
 
-                mediaRecorder.ondataavailable = event => {
-                    if (event.data.size > 0) {
-                        recordedChunks.push(event.data);
-                    }
-                };
+        // Fungsi konfigurasi resolusi berdasarkan pilihan user
+        function getResolutionConstraints(selection) {
+            switch(selection) {
+                case '1080p': return { width: { ideal: 1920 }, height: { ideal: 1080 } };
+                case '720p':  return { width: { ideal: 1280 }, height: { ideal: 720 } };
+                case '480p':  return { width: { ideal: 854 }, height: { ideal: 480 } };
+                case 'max':   default: return { width: { ideal: 4096 }, height: { ideal: 2160 } }; // Memaksa HP memberikan resolusi tertingginya
+            }
+        }
 
-                mediaRecorder.onstop = () => {
-                    videoBlob = new Blob(recordedChunks, { type: 'video/webm' });
-                    recordedChunks = []; // Reset chunks untuk rekaman berikutnya
-                    uploadBtn.disabled = false;
-                    statusText.innerText = "Status: Rekaman selesai. Siap diunggah.";
-                    
-                    // Memutar ulang hasil rekaman di elemen video
-                    preview.srcObject = null;
-                    preview.src = URL.createObjectURL(videoBlob);
-                    preview.controls = true;
-                    preview.muted = false;
-                };
-            })
-            .catch(err => {
-                statusText.innerText = "Error: Kamera atau mikrofon tidak dapat diakses.";
-                console.error("Gagal mengakses media perangkat.", err);
-            });
-
-        // Event Listener untuk Tombol Mulai Rekam
-        startBtn.addEventListener('click', () => {
-            // Jika memutar ulang video sebelumnya, kembalikan ke live stream kamera
-            if (!preview.srcObject) {
-                navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-                    .then(stream => {
-                        preview.src = "";
-                        preview.srcObject = stream;
-                        preview.controls = false;
-                        preview.muted = true;
-                        preview.play();
-                    });
+        // Fungsi utama untuk memulai/mengubah aliran kamera (Stream)
+        function initCamera() {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
             }
 
-            recordedChunks = [];
-            mediaRecorder.start();
+            statusText.innerText = "Status: Membuka kamera...";
+            
+            const resConstraints = getResolutionConstraints(resolutionSelect.value);
+            const facingMode = cameraSelect.value;
+            
+            // Mengatur aspek rasio pada video box (CSS)
+            const [wRatio, hRatio] = aspectSelect.value.split('/');
+            preview.style.aspectRatio = `${wRatio} / ${hRatio}`;
+
+            // Menyusun semua perintah konfigurasi ke browser
+            const constraints = {
+                video: {
+                    facingMode: facingMode,
+                    width: resConstraints.width,
+                    height: resConstraints.height,
+                    aspectRatio: parseFloat(wRatio) / parseFloat(hRatio)
+                },
+                audio: true
+            };
+
+            navigator.mediaDevices.getUserMedia(constraints)
+                .then(stream => {
+                    currentStream = stream;
+                    preview.srcObject = stream;
+                    
+                    // Deteksi resolusi aktual yang berhasil didapatkan dari hardware HP
+                    const videoTrack = stream.getVideoTracks()[0];
+                    const settings = videoTrack.getSettings();
+                    statusText.innerText = `Status: Kamera aktif (${settings.width}x${settings.height} px)`;
+
+                    // Inisialisasi MediaRecorder
+                    mediaRecorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+
+                    mediaRecorder.ondataavailable = event => {
+                        if (event.data.size > 0) recordedChunks.push(event.data);
+                    };
+
+                    mediaRecorder.onstop = () => {
+                        videoBlob = new Blob(recordedChunks, { type: 'video/webm' });
+                        recordedChunks = [];
+                        uploadBtn.disabled = false;
+                        statusText.innerText = "Status: Rekaman selesai. Siap diunggah.";
+                        
+                        // Tampilkan hasil rekaman untuk review
+                        preview.srcObject = null;
+                        preview.src = URL.createObjectURL(videoBlob);
+                        preview.controls = true;
+                        preview.muted = false;
+                    };
+                })
+                .catch(err => {
+                    statusText.innerText = "Error: Konfigurasi kamera tidak didukung atau izin ditolak.";
+                    console.error(err);
+                });
+        }
+
+        // Jalankan kamera otomatis saat pertama kali halaman dibuka
+        initCamera();
+
+        // Event listener saat user mengubah pengaturan di tengah jalan
+        cameraSelect.addEventListener('change', initCamera);
+        resolutionSelect.addEventListener('change', initCamera);
+        aspectSelect.addEventListener('change', initCamera);
+
+        // Aksi Tombol Mulai Rekam
+        startBtn.addEventListener('click', () => {
+            if (!preview.srcObject) {
+                initCamera();
+                setTimeout(() => mediaRecorder.start(), 1000); // Beri jeda 1 detik agar kamera siap
+            } else {
+                mediaRecorder.start();
+            }
             startBtn.disabled = true;
             stopBtn.disabled = false;
             uploadBtn.disabled = true;
-            statusText.innerText = "Status: Sedang merekam (Tombol Berhenti akan mengakhiri)...";
+            cameraSelect.disabled = true;
+            resolutionSelect.disabled = true;
+            aspectSelect.disabled = true;
+            statusText.innerText = "Status: Sedang merekam...";
         });
 
-        // Event Listener untuk Tombol Berhenti Rekam
+        // Aksi Tombol Berhenti Rekam
         stopBtn.addEventListener('click', () => {
             mediaRecorder.stop();
             startBtn.disabled = false;
             stopBtn.disabled = true;
+            cameraSelect.disabled = false;
+            resolutionSelect.disabled = false;
+            aspectSelect.disabled = false;
         });
 
-        // Event Listener untuk Tombol Unggah
+        // Aksi Tombol Unggah ke Google Drive
         uploadBtn.addEventListener('click', () => {
             if (!videoBlob) return;
-
-            // Validasi jika URL Apps Script belum diganti
             if (GAS_URL === "MASUKKAN_URL_WEB_APP_DARI_APPS_SCRIPT_DI_SINI") {
-                alert("Harap masukkan URL Web App Google Apps Script ke dalam variabel GAS_URL di kode HTML terlebih dahulu.");
+                alert("Harap masukkan URL Web App Google Apps Script Anda ke variabel GAS_URL!");
                 return;
             }
 
-            statusText.innerText = "Status: Memproses ukuran file...";
+            statusText.innerText = "Status: Memproses video...";
             uploadBtn.disabled = true;
             startBtn.disabled = true;
 
@@ -160,7 +270,7 @@
                 const base64data = reader.result;
                 const fileName = "Rekaman_" + new Date().getTime() + ".webm";
 
-                statusText.innerText = "Status: Sedang mengunggah ke Google Drive (Mohon tunggu, jangan tutup halaman)...";
+                statusText.innerText = "Status: Mengunggah ke Google Drive (Mohon tunggu)...";
 
                 fetch(GAS_URL, {
                     method: 'POST',
@@ -173,15 +283,15 @@
                 .then(response => response.json())
                 .then(result => {
                     if (result.status === 'success') {
-                        statusText.innerHTML = `Status: Berhasil! <a href="${result.url}" target="_blank" style="color: #007bff;">Lihat Video di Google Drive</a>`;
+                        statusText.innerHTML = `Status: Sukses! <a href="${result.url}" target="_blank" style="color: #007bff; text-decoration: underline;">Lihat File di Drive</a>`;
                     } else {
-                        statusText.innerText = "Status: Gagal mengunggah - " + result.message;
+                        statusText.innerText = "Status: Gagal - " + result.message;
                     }
                     uploadBtn.disabled = false;
                     startBtn.disabled = false;
                 })
                 .catch(error => {
-                    statusText.innerText = "Status: Terjadi kesalahan jaringan. Pastikan URL Web App benar dan internet stabil.";
+                    statusText.innerText = "Status: Terjadi kesalahan jaringan.";
                     console.error("Error:", error);
                     uploadBtn.disabled = false;
                     startBtn.disabled = false;
