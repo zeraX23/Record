@@ -1,0 +1,30 @@
+function doPost(e) {
+  try {
+    // ID Folder Google Drive Anda (Sudah otomatis terpasang)
+    var folderId = "1dIBOAk_n2hUDlncTpUCVty7BtSrKy7yf"; 
+    var folder = DriveApp.getFolderById(folderId);
+    
+    // Mendapatkan data file dari request (format base64)
+    var data = e.parameter.fileData;
+    var filename = e.parameter.filename;
+    
+    // Decode base64 menjadi file binary
+    var contentType = data.substring(5,data.indexOf(';')),
+        bytes = Utilities.base64Decode(data.substr(data.indexOf('base64,')+7)),
+        blob = Utilities.newBlob(bytes, contentType, filename);
+    
+    // Simpan ke Drive
+    var file = folder.createFile(blob);
+    
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "success", 
+      url: file.getUrl()
+    })).setMimeType(ContentService.MimeType.JSON);
+    
+  } catch (error) {
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "error", 
+      message: error.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
